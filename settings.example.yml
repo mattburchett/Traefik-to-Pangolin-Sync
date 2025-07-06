@@ -1,0 +1,42 @@
+# Traefik Configuration
+traefik_sites:
+  - site_name: my-site # this needs to match the name of a Pangolin site
+    api_url: "http://traefik:8080/api"
+    api_http_routers_path: "/http/routers"
+    target_host: "traefik"
+    target_port: 80
+    target_method: "HTTP"
+    # only allow discovery of traefik hosts in the following domains for this site
+    host_whitelist:
+      - "example.com"
+      - "mydomain.net"
+
+# Pangolin API Configuration
+pangolin_api_url: "https://api.pangolin.com/v1"
+pangolin_api_key: "your-api-key-here"
+pangolin_org_id: "your-org-id"
+
+# Static HTTP forwards (optional)
+static_http_forwards:
+  - subdomain: "app"
+    domain: "example.com"
+    site_name: my-site
+    target_host: my-app
+    target_port: 80
+    target_method: http
+
+# Static TCP forwards (optional)
+static_tcp_forwards:
+  - name: ssh
+    site_name: my-site
+    source_port: 22
+    target_host: my-server
+    target_port: 22
+
+# Static UDP forwards (optional)
+static_udp_forwards:
+  - name: dns
+    site_name: my-site
+    source_port: 53
+    target_host: my-dns
+    target_port: 53

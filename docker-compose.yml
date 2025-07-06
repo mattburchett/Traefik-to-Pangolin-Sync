@@ -1,0 +1,10 @@
+---
+services:
+  traefik-pangolin-sync:
+    image: ghcr.io/andrewpaglusch/traefik-to-pangolin-sync:master
+    restart: unless-stopped
+    container_name: traefik-pangolin-sync
+    environment:
+      SCHEDULE_INTERVAL: 300
+    volumes:
+      - ./settings.yml:/app/settings.yml:ro
