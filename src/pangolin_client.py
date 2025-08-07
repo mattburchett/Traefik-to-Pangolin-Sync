@@ -166,7 +166,6 @@ class Pangolin:
         payload = {
             "name": forward.fqdn,
             "subdomain": forward.subdomain,
-            "isBaseDomain": not forward.subdomain,
             "siteId": site_id,
             "http": True,
             "protocol": "tcp",
