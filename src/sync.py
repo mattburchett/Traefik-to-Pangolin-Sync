@@ -178,3 +178,28 @@ class Sync:
         print("\n>>> Creating static UDP Forwards...")
         self._sync_static_udp_forwards(static_udp_forwards)
 
+    def get_valid_resources(self, static_http_forwards: list, static_tcp_forwards: list, static_udp_forwards: list) -> tuple:
+        """Collect all valid domains and ports from Traefik and static config"""
+        valid_domains = set()
+        valid_tcp_ports = set()
+        valid_udp_ports = set()
+
+        if self.t:
+            for dynamic_http_forward_entry in self.t.get_hosts():
+                dynamic_http_forward = self._build_httpforward_obj_from_dynamic(dynamic_http_forward_entry)
+                if dynamic_http_forward:
+                    valid_domains.add(dynamic_http_forward.fqdn.lower())
+
+        for static_http_forward_entry in static_http_forwards:
+            static_http_forward = self._build_httpforward_obj_from_static(static_http_forward_entry)
+            if static_http_forward:
+                valid_domains.add(static_http_forward.fqdn.lower())
+
+        for static_tcp_forward_entry in static_tcp_forwards:
+            valid_tcp_ports.add(static_tcp_forward_entry['source_port'])
+
+        for static_udp_forward_entry in static_udp_forwards:
+            valid_udp_ports.add(static_udp_forward_entry['source_port'])
+
+        return valid_domains, valid_tcp_ports, valid_udp_ports
+
