@@ -343,3 +343,117 @@ class Pangolin:
         else:
             print("No orphaned resources found")
 
+    def update_target(self, target_id: int, ip: str, port: int, method: str, enabled: bool = True) -> bool:
+        """Update an existing target"""
+        url = f"{self.s.pangolin_api_url}/target/{target_id}"
+        payload = {
+            "ip": ip,
+            "port": port,
+            "method": method,
+            "enabled": enabled
+        }
+        
+        response = requests.post(url, headers=self.headers, json=payload)
+        if not self._check_response_success(response):
+            return False
+        return True
+
+    def delete_target(self, target_id: int) -> bool:
+        """Delete a target"""
+        url = f"{self.s.pangolin_api_url}/target/{target_id}"
+        response = requests.delete(url, headers=self.headers)
+        if not self._check_response_success(response):
+            return False
+        return True
+
+    def _find_resource_by_http_domain(self, fqdn: str) -> Optional[dict]:
+        """Find resource matching HTTP domain"""
+        for resource in self.resource_cache:
+            if (resource.get('http', False) and 
+                resource.get('fullDomain', '').lower() == fqdn.lower()):
+                return resource
+        return None
+
+    def _find_resource_by_tcp_port(self, port: int) -> Optional[dict]:
+        """Find resource matching TCP port"""
+        for resource in self.resource_cache:
+            if (resource.get('protocol') == 'tcp' and 
+                resource.get('proxyPort') == port):
+                return resource
+        return None
+
+    def _find_resource_by_udp_port(self, port: int) -> Optional[dict]:
+        """Find resource matching UDP port"""
+        for resource in self.resource_cache:
+            if (resource.get('protocol') == 'udp' and 
+                resource.get('proxyPort') == port):
+                return resource
+        return None
+
+    def _check_and_update_target(self, forward, resource: dict) -> bool:
+        """Generic method to check and update resource targets"""
+        resource_id = resource.get('resourceId')
+        if not resource_id:
+            return False
+        
+        targets = self.get_resource_targets(resource_id)
+        if not targets:
+            print(f"[{forward}] No targets found for existing resource")
+            return False
+        
+        target = targets[0]
+        target_id = target.get('targetId')
+        needs_update = False
+        
+        # Check for differences
+        if target.get('ip') != forward.target_host:
+            print(f"[{forward}] Target host changed: {target.get('ip')} → {forward.target_host}")
+            needs_update = True
+        
+        if target.get('port') != forward.target_port:
+            print(f"[{forward}] Target port changed: {target.get('port')} → {forward.target_port}")
+            needs_update = True
+        
+        # Check method for HTTP forwards
+        if hasattr(forward, 'target_method'):
+            if target.get('method') != forward.target_method.value:
+                print(f"[{forward}] Target method changed: {target.get('method')} → {forward.target_method.value}")
+                needs_update = True
+        
+        # Update if needed
+        if needs_update:
+            if not target_id:
+                print(f"[{forward}] Cannot update - no target ID found")
+                return False
+            
+            print(f"[{forward}] Updating existing resource configuration...")
+            method = getattr(forward, 'target_method', None)
+            method_value = method.value if method else getattr(forward, 'protocol', 'TCP').upper()
+            return self.update_target(target_id, forward.target_host, forward.target_port, method_value)
+        else:
+            print(f"[{forward}] Configuration is up to date")
+            return True
+
+    def compare_and_update_http_resource(self, forward: HTTPForward) -> bool:
+        """Compare HTTP resource configuration and update if needed"""
+        resource = self._find_resource_by_http_domain(forward.fqdn)
+        return self._check_and_update_target(forward, resource) if resource else False
+
+    def compare_and_update_tcp_resource(self, forward: TCPForward) -> bool:
+        """Compare TCP resource configuration and update if needed"""
+        resource = self._find_resource_by_tcp_port(forward.source_port)
+        if resource:
+            # Add protocol info for method determination
+            forward.protocol = 'tcp'
+            return self._check_and_update_target(forward, resource)
+        return False
+
+    def compare_and_update_udp_resource(self, forward: UDPForward) -> bool:
+        """Compare UDP resource configuration and update if needed"""
+        resource = self._find_resource_by_udp_port(forward.source_port)
+        if resource:
+            # Add protocol info for method determination
+            forward.protocol = 'udp'
+            return self._check_and_update_target(forward, resource)
+        return False
+
