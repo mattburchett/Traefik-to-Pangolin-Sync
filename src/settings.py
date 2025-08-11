@@ -14,6 +14,7 @@ class Settings:
         self.static_http_forwards: List[Dict[str, Any]]
         self.static_tcp_forwards: List[Dict[str, Any]]
         self.static_udp_forwards: List[Dict[str, Any]]
+        self.cleanup_orphaned_resources: bool
 
         if yaml_path is None:
             yaml_path = Path(__file__).parent / 'settings.yml'
@@ -32,6 +33,7 @@ class Settings:
         self.static_http_forwards = getattr(self, 'static_http_forwards') or []
         self.static_tcp_forwards = getattr(self, 'static_tcp_forwards') or []
         self.static_udp_forwards = getattr(self, 'static_udp_forwards') or []
+        self.cleanup_orphaned_resources = getattr(self, 'cleanup_orphaned_resources', False)
 
         # Convert traefik_sites from dict to TraefikSite instances
         traefik_sites_raw = getattr(self, 'traefik_sites') or []

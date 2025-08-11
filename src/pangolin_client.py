@@ -9,6 +9,7 @@ class Pangolin:
         self.resource_cache = []
         self.domain_id_cache = {}
         self.site_id_cache = {}
+        self.site_nice_id_cache = {}
         self.s = s
         self.headers = {
             'accept': '*/*',
@@ -53,7 +54,9 @@ class Pangolin:
                 return None
 
             data = r.json()
-            self.site_id_cache = {site['name']: site['siteId'] for site in data.get('data', {}).get('sites', {})}
+            sites = data.get('data', {}).get('sites', {})
+            self.site_id_cache = {site['name']: site['siteId'] for site in sites}
+            self.site_nice_id_cache = {site['niceId']: site['name'] for site in sites}
             print(f"Loaded {len(self.site_id_cache)} siteName<>siteID mappings into cache")
             if self.site_id_cache:
                 print("  [Site Name]→ [Site ID]")
@@ -236,3 +239,107 @@ class Pangolin:
             return None
 
         return response.json().get('data', {}).get('targetId')
+
+    def delete_resource(self, resource_id: int) -> bool:
+        """Delete a resource from Pangolin"""
+        url = f"{self.s.pangolin_api_url}/resource/{resource_id}"
+        response = requests.delete(url, headers=self.headers)
+        if not self._check_response_success(response):
+            return False
+        return True
+
+    def get_resource_targets(self, resource_id: int) -> Optional[list]:
+        """Get targets for a resource"""
+        url = f"{self.s.pangolin_api_url}/resource/{resource_id}/targets"
+        response = requests.get(url, headers=self.headers)
+        if not self._check_response_success(response):
+            return None
+        
+        data = response.json()
+        return data.get('data', {}).get('targets', [])
+
+    def _get_site_name_for_resource(self, resource: dict) -> str:
+        """Get site name from resource using niceId lookup"""
+        site_nice_id = resource.get('siteId')  # This is actually the niceId
+        return self.site_nice_id_cache.get(site_nice_id, "unknown") if site_nice_id else "unknown"
+
+    def _format_resource_info(self, resource: dict, site_name: str) -> str:
+        """Format resource info string for logging"""
+        resource_id = resource.get('resourceId')
+        
+        if resource.get('http', False):
+            full_domain = resource.get('fullDomain', '').lower()
+            targets = self.get_resource_targets(resource_id) if resource_id else []
+            
+            if targets and targets[0]:
+                target = targets[0]
+                target_host = target.get('ip', 'unknown')
+                target_port = target.get('port', 'unknown')
+                method = target.get('method', 'unknown').lower()
+                return f"{full_domain}→ {method}://{target_host}:{target_port} ({site_name})"
+            else:
+                return f"{full_domain}→ unknown ({site_name})"
+                
+        elif resource.get('protocol') in ['tcp', 'udp']:
+            protocol = resource.get('protocol').upper()
+            proxy_port = resource.get('proxyPort')
+            targets = self.get_resource_targets(resource_id) if resource_id else []
+            
+            if targets and targets[0]:
+                target = targets[0]
+                target_host = target.get('ip', 'unknown')
+                target_port = target.get('port', 'unknown')
+                return f"{protocol}:{proxy_port}→ {target_host}:{target_port} ({site_name})"
+            else:
+                return f"{protocol}:{proxy_port}→ unknown ({site_name})"
+        
+        return f"unknown resource ({site_name})"
+
+    def _is_resource_orphaned(self, resource: dict, valid_domains: set, valid_tcp_ports: set, valid_udp_ports: set) -> bool:
+        """Check if resource should be deleted as orphaned"""
+        if resource.get('http', False):
+            full_domain = resource.get('fullDomain', '').lower()
+            return full_domain and full_domain not in valid_domains
+            
+        elif resource.get('protocol') == 'tcp':
+            proxy_port = resource.get('proxyPort')
+            return proxy_port and proxy_port not in valid_tcp_ports
+            
+        elif resource.get('protocol') == 'udp':
+            proxy_port = resource.get('proxyPort')
+            return proxy_port and proxy_port not in valid_udp_ports
+            
+        return False
+
+    def cleanup_orphaned_resources(self, valid_domains: set, valid_tcp_ports: set, valid_udp_ports: set) -> None:
+        """Remove resources from Pangolin that aren't in Traefik or static config"""
+        if not self.resource_cache:
+            print("No resources in cache to clean up")
+            return
+
+        orphaned_resources = []
+        
+        for resource in self.resource_cache:
+            resource_id = resource.get('resourceId')
+            if not resource_id:
+                continue
+
+            if self._is_resource_orphaned(resource, valid_domains, valid_tcp_ports, valid_udp_ports):
+                site_name = self._get_site_name_for_resource(resource)
+                resource_info = self._format_resource_info(resource, site_name)
+                orphaned_resources.append((resource_id, resource_info))
+
+        deleted_count = 0
+        for resource_id, resource_info in orphaned_resources:
+            print(f"[{resource_info}] Deleting orphaned resource...")
+            if self.delete_resource(resource_id):
+                deleted_count += 1
+            else:
+                print(f"[{resource_info}] Failed to delete resource")
+
+        if deleted_count > 0:
+            print(f"Deleted {deleted_count} orphaned resources")
+            self.resource_cache = []
+        else:
+            print("No orphaned resources found")
+

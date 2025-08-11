@@ -16,6 +16,11 @@ pangolin_api_url: "https://api.pangolin.com/v1"
 pangolin_api_key: "your-api-key-here"
 pangolin_org_id: "your-org-id"
 
+# Cleanup Configuration
+# Set to true to automatically remove orphaned resources from Pangolin
+# that are not in Traefik or static configuration (defaults to false)
+cleanup_orphaned_resources: false
+
 # Static HTTP forwards (optional)
 static_http_forwards:
   - subdomain: "app"
