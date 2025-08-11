@@ -75,12 +75,14 @@ class Sync:
             print(f"Error: Unable to create resource for {static_http_forward_entry['subdomain']}.{static_http_forward_entry['domain']}. No site_name provided")
             return
 
+        target_method = static_http_forward_entry.get('target_method', 'HTTPS').upper()
+        
         return HTTPForward(subdomain=static_http_forward_entry['subdomain'],
                            domain=static_http_forward_entry['domain'],
                            site_name=site_name,
                            target_host=static_http_forward_entry['target_host'],
                            target_port=static_http_forward_entry['target_port'],
-                           target_method=HTTPForwardMethod(static_http_forward_entry['target_method'].upper()))
+                           target_method=HTTPForwardMethod(target_method))
 
     def _build_tcpforward_obj_from_static(self, static_tcp_forward_entry: dict) -> Optional[TCPForward]:
         return TCPForward(name=static_tcp_forward_entry.get('name', f"TCP Forward {static_tcp_forward_entry['source_port']}"),
@@ -105,7 +107,8 @@ class Sync:
                 continue
 
             if self.p.check_domain_in_resource_cache(dynamic_http_forward.fqdn):
-                print(f"[{dynamic_http_forward}] Already in Pangolin. Skipping...")
+                print(f"[{dynamic_http_forward}] Already in Pangolin. Checking configuration...")
+                self.p.compare_and_update_http_resource(dynamic_http_forward)
                 continue
 
             self._make_http_forward(dynamic_http_forward)
@@ -120,7 +123,8 @@ class Sync:
                 continue
 
             if self.p.check_domain_in_resource_cache(static_http_forward.fqdn):
-                print(f"[{static_http_forward}] Already in Pangolin. Skipping...")
+                print(f"[{static_http_forward}] Already in Pangolin. Checking configuration...")
+                self.p.compare_and_update_http_resource(static_http_forward)
                 continue
 
             self._make_http_forward(static_http_forward)
@@ -134,7 +138,8 @@ class Sync:
                 continue
 
             if self.p.check_tcp_forward_in_resource_cache(static_tcp_forward.source_port):
-                print(f"[{static_tcp_forward}] Already in Pangolin. Skipping...")
+                print(f"[{static_tcp_forward}] Already in Pangolin. Checking configuration...")
+                self.p.compare_and_update_tcp_resource(static_tcp_forward)
                 continue
 
             self._make_tcp_forward(static_tcp_forward)
@@ -148,7 +153,8 @@ class Sync:
                 continue
 
             if self.p.check_udp_forward_in_resource_cache(static_udp_forward.source_port):
-                print(f"[{static_udp_forward}] Already in Pangolin. Skipping...")
+                print(f"[{static_udp_forward}] Already in Pangolin. Checking configuration...")
+                self.p.compare_and_update_udp_resource(static_udp_forward)
                 continue
 
             self._make_udp_forward(static_udp_forward)
